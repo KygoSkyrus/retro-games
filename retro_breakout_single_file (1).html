@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Retro Breakout</title>
+<style>
+  body { background: black; color: lime; margin: 0; overflow: hidden; font-family: monospace; }
+  canvas { display: block; margin: 0 auto; background: black; }
+</style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+let paddleWidth = 100, paddleHeight = 20, paddleX = (canvas.width - paddleWidth) / 2;
+let ballRadius = 8, ballX = canvas.width / 2, ballY = canvas.height - 40, ballDX = 4, ballDY = -4;
+let rightPressed = false, leftPressed = false;
+
+let brickRowCount = 5, brickColumnCount = 8, brickWidth = 75, brickHeight = 20, brickPadding = 10, brickOffsetTop = 50, brickOffsetLeft = 30;
+let bricks = [];
+let score = 0, lives = 3, highScore = localStorage.getItem('breakoutHighScore') || 0;
+
+for (let c = 0; c < brickColumnCount; c++) {
+  bricks[c] = [];
+  for (let r = 0; r < brickRowCount; r++) {
+    bricks[c][r] = { x: 0, y: 0, hits: 1 + Math.floor(Math.random() * 3) };
+  }
+}
+
+document.addEventListener('keydown', keyDownHandler);
+document.addEventListener('keyup', keyUpHandler);
+document.addEventListener('mousemove', mouseMoveHandler);
+
+function keyDownHandler(e) {
+  if (e.key === 'Right' || e.key === 'ArrowRight') rightPressed = true;
+  else if (e.key === 'Left' || e.key === 'ArrowLeft') leftPressed = true;
+}
+function keyUpHandler(e) {
+  if (e.key === 'Right' || e.key === 'ArrowRight') rightPressed = false;
+  else if (e.key === 'Left' || e.key === 'ArrowLeft') leftPressed = false;
+}
+function mouseMoveHandler(e) {
+  let relativeX = e.clientX - canvas.offsetLeft;
+  if (relativeX > 0 && relativeX < canvas.width) paddleX = relativeX - paddleWidth / 2;
+}
+
+function collisionDetection() {
+  for (let c = 0; c < brickColumnCount; c++) {
+    for (let r = 0; r < brickRowCount; r++) {
+      let b = bricks[c][r];
+      if (b.hits > 0) {
+        if (ballX > b.x && ballX < b.x + brickWidth && ballY > b.y && ballY < b.y + brickHeight) {
+          ballDY = -ballDY;
+          b.hits--;
+          score += 10;
+          spawnParticles(ballX, ballY, b.hits);
+          if (score > highScore) {
+            highScore = score;
+            localStorage.setItem('breakoutHighScore', highScore);
+          }
+        }
+      }
+    }
+  }
+}
+
+let particles = [];
+function spawnParticles(x, y, strength) {
+  for (let i = 0; i < 10; i++) {
+    particles.push({
+      x: x,
+      y: y,
+      dx: (Math.random() - 0.5) * 4,
+      dy: (Math.random() - 0.5) * 4,
+      life: 30,
+      color: strength > 0 ? 'orange' : 'lime'
+    });
+  }
+}
+function drawParticles() {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    let p = particles[i];
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x, p.y, 2, 2);
+    p.x += p.dx;
+    p.y += p.dy;
+    p.life--;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+}
+
+function drawBall() {
+  ctx.beginPath();
+  ctx.arc(ballX, ballY, ballRadius, 0, Math.PI * 2);
+  ctx.fillStyle = 'lime';
+  ctx.fill();
+  ctx.closePath();
+}
+function drawPaddle() {
+  ctx.beginPath();
+  ctx.rect(paddleX, canvas.height - paddleHeight - 10, paddleWidth, paddleHeight);
+  ctx.fillStyle = 'lime';
+  ctx.fill();
+  ctx.closePath();
+}
+function drawBricks() {
+  for (let c = 0; c < brickColumnCount; c++) {
+    for (let r = 0; r < brickRowCount; r++) {
+      if (bricks[c][r].hits > 0) {
+        let brickX = c * (brickWidth + brickPadding) + brickOffsetLeft;
+        let brickY = r * (brickHeight + brickPadding) + brickOffsetTop;
+        bricks[c][r].x = brickX;
+        bricks[c][r].y = brickY;
+        ctx.beginPath();
+        ctx.rect(brickX, brickY, brickWidth, brickHeight);
+        ctx.fillStyle = bricks[c][r].hits === 1 ? 'lime' : bricks[c][r].hits === 2 ? 'orange' : 'red';
+        ctx.fill();
+        ctx.closePath();
+      }
+    }
+  }
+}
+function drawScore() {
+  ctx.fillStyle = 'lime';
+  ctx.fillText('Score: ' + score, 8, 20);
+  ctx.fillText('High: ' + highScore, 8, 40);
+  ctx.fillText('Lives: ' + lives, canvas.width - 80, 20);
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawBricks();
+  drawBall();
+  drawPaddle();
+  drawScore();
+  drawParticles();
+  collisionDetection();
+
+  if (ballX + ballDX > canvas.width - ballRadius || ballX + ballDX < ballRadius) ballDX = -ballDX;
+  if (ballY + ballDY < ballRadius) ballDY = -ballDY;
+  else if (ballY + ballDY > canvas.height - ballRadius - paddleHeight - 10) {
+    if (ballX > paddleX && ballX < paddleX + paddleWidth) {
+      ballDY = -ballDY;
+    } else if (ballY + ballDY > canvas.height - ballRadius) {
+      lives--;
+      if (!lives) {
+        alert('GAME OVER');
+        document.location.reload();
+      } else {
+        ballX = canvas.width / 2;
+        ballY = canvas.height - 40;
+        ballDX = 4;
+        ballDY = -4;
+        paddleX = (canvas.width - paddleWidth) / 2;
+      }
+    }
+  }
+
+  if (rightPressed && paddleX < canvas.width - paddleWidth) paddleX += 7;
+  else if (leftPressed && paddleX > 0) paddleX -= 7;
+
+  ballX += ballDX;
+  ballY += ballDY;
+  requestAnimationFrame(draw);
+}
+
+draw();
+</script>
+</body>
+</html>

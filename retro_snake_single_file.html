@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Retro Snake — Single File</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+  :root{--bg:#05060a;--accent:#7ef0a3;--panel:#071018}
+  *{box-sizing:border-box}
+  body{margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#020308,#08121a);font-family:'Press Start 2P',monospace;color:var(--accent)}
+  .card{background:linear-gradient(180deg,#08111a,#061018);padding:14px;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.6);width:100%;max-width:760px}
+  .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+  .title{font-size:14px}
+  .hud{display:flex;gap:12px;align-items:center}
+  .btn{background:#0b1720;border:1px solid rgba(255,255,255,.03);padding:8px;border-radius:8px;color:#ffd27a;cursor:pointer}
+  canvas{display:block;background:#021017;border-radius:6px;max-width:100%;height:auto}
+  .touch{display:none;margin-top:10px;gap:8px}
+  .touch button{flex:1}
+  @media(max-width:700px){.touch{display:flex}}
+  .footer{margin-top:10px;font-size:11px;color:#84aedd}
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="top">
+      <div class="title">RETRO SNAKE</div>
+      <div class="hud">
+        <div>Score: <span id="score">0</span></div>
+        <div>High: <span id="high">0</span></div>
+        <button class="btn" id="start">Start</button>
+        <button class="btn" id="reset">Reset</button>
+      </div>
+    </div>
+    <canvas id="c" width="480" height="480"></canvas>
+    <div class="touch">
+      <button class="btn" data-act="left">◀</button>
+      <button class="btn" data-act="up">▲</button>
+      <button class="btn" data-act="down">▼</button>
+      <button class="btn" data-act="right">▶</button>
+    </div>
+    <div class="footer">Retro pixel look, touch controls, sound, responsive canvas, and localStorage highscore.</div>
+  </div>
+<script>
+(() => {
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  const scoreEl = document.getElementById('score');
+  const highEl = document.getElementById('high');
+  const startBtn = document.getElementById('start');
+  const resetBtn = document.getElementById('reset');
+
+  // settings
+  const CELL = 24; // pixel size (base). we'll scale canvas for responsiveness.
+  const COLS = 20; const ROWS = 20;
+
+  // state
+  let snake = [{x:10,y:10}];
+  let dir = {x:0,y:0};
+  let apple = null;
+  let speed = 8; // moves per second
+  let lastTime = 0; let acc = 0;
+  let score = 0; let high = parseInt(localStorage.getItem('retroSnakeHigh')||'0',10);
+  let running = false; let gameOver=false;
+
+  highEl.textContent = high;
+
+  function reset(){ snake = [{x:10,y:10}]; dir={x:0,y:0}; placeApple(); score=0; updateHUD(); gameOver=false; }
+  function updateHUD(){ scoreEl.textContent=score; highEl.textContent=high; }
+
+  function placeApple(){
+    while(true){
+      const a = {x: Math.floor(Math.random()*COLS), y: Math.floor(Math.random()*ROWS)};
+      if(!snake.some(s=>s.x===a.x&&s.y===a.y)){ apple = a; break; }
+    }
+  }
+
+  function step(){
+    const head = {x: snake[0].x + dir.x, y: snake[0].y + dir.y};
+    // wrap
+    if(head.x < 0) head.x = COLS-1; if(head.x >= COLS) head.x = 0;
+    if(head.y < 0) head.y = ROWS-1; if(head.y >= ROWS) head.y = 0;
+    // collision
+    if(snake.some(s=>s.x===head.x&&s.y===head.y)){
+      // game over
+      running = false; gameOver = true; playSound('die'); if(score>high){ high=score; localStorage.setItem('retroSnakeHigh', high); }
+      updateHUD(); return;
+    }
+    snake.unshift(head);
+    if(apple && head.x===apple.x && head.y===apple.y){ score += 10; placeApple(); playSound('eat'); if(score>high){ high=score; localStorage.setItem('retroSnakeHigh', high); } updateHUD(); }
+    else snake.pop();
+  }
+
+  function draw(){
+    // scale for responsiveness
+    const available = Math.min(window.innerWidth*0.9, window.innerHeight*0.75, COLS*CELL);
+    canvas.width = available; canvas.height = available;
+    const scale = canvas.width / (COLS*1);
+    ctx.fillStyle = '#021017'; ctx.fillRect(0,0,canvas.width,canvas.height);
+    // draw grid background
+    for(let y=0;y<ROWS;y++){
+      for(let x=0;x<COLS;x++){
+        ctx.fillStyle = (x+y)%2===0 ? '#042028' : '#031a22';
+        ctx.fillRect(x*scale, y*scale, scale, scale);
+      }
+    }
+    // draw apple
+    if(apple){ ctx.fillStyle = '#ff3860'; roundRect(ctx, apple.x*scale+scale*0.08, apple.y*scale+scale*0.08, scale*0.84, scale*0.84, scale*0.12); }
+    // draw snake
+    for(let i=snake.length-1;i>=0;i--){
+      const s = snake[i];
+      ctx.fillStyle = i===0 ? '#7ef0a3' : '#3ddf8f';
+      roundRect(ctx, s.x*scale+scale*0.06, s.y*scale+scale*0.06, scale*0.88, scale*0.88, scale*0.12);
+      // small eye for head
+      if(i===0){ ctx.fillStyle='#07241a'; ctx.fillRect(s.x*scale + scale*0.55, s.y*scale + scale*0.28, scale*0.12, scale*0.12); }
+    }
+  }
+
+  function roundRect(ctx,x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); ctx.fill(); }
+
+  function loop(time){ if(!lastTime) lastTime=time; const delta = (time-lastTime)/1000; lastTime=time; if(running){ acc += delta; const interval = 1/speed; while(acc > interval){ acc -= interval; step(); } } draw(); requestAnimationFrame(loop); }
+
+  // input
+  window.addEventListener('keydown', e=>{
+    if(e.key==='ArrowUp' || e.key==='w'){ if(dir.y!==1){ dir={x:0,y:-1}; playSound('move'); } }
+    if(e.key==='ArrowDown' || e.key==='s'){ if(dir.y!==-1){ dir={x:0,y:1}; playSound('move'); } }
+    if(e.key==='ArrowLeft' || e.key==='a'){ if(dir.x!==1){ dir={x:-1,y:0}; playSound('move'); } }
+    if(e.key==='ArrowRight' || e.key==='d'){ if(dir.x!==-1){ dir={x:1,y:0}; playSound('move'); } }
+    if(e.key===' '){ if(!running){ running=true; playSound('start'); } }
+  });
+
+  // touch buttons
+  document.querySelectorAll('.touch button').forEach(btn=>{
+    btn.addEventListener('touchstart', e=>{ e.preventDefault(); const a = btn.dataset.act; if(a==='left' && dir.x!==1) dir={x:-1,y:0}; if(a==='right'&& dir.x!==-1) dir={x:1,y:0}; if(a==='up'&& dir.y!==1) dir={x:0,y:-1}; if(a==='down'&& dir.y!==-1) dir={x:0,y:1}; playSound('move'); });
+  });
+
+  startBtn.addEventListener('click', ()=>{ if(!running){ running=true; playSound('start'); } });
+  resetBtn.addEventListener('click', ()=>{ reset(); running=false; lastTime=0; acc=0; draw(); });
+
+  // simple sounds
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  const actx = AudioCtx ? new AudioCtx() : null;
+  function playSound(type){ if(!actx) return; const o = actx.createOscillator(); const g = actx.createGain(); if(type==='eat'){ o.frequency.value=880; g.gain.value=0.05; } else if(type==='die'){ o.frequency.value=120; g.gain.value=0.12; } else if(type==='move'){ o.frequency.value=220; g.gain.value=0.01; } else if(type==='start'){ o.frequency.value=660; g.gain.value=0.03; } else { o.frequency.value=300; g.gain.value=0.02; }
+    o.type='square'; o.connect(g); g.connect(actx.destination); o.start(); g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + 0.12); o.stop(actx.currentTime + 0.15);
+  }
+
+  // init
+  reset(); draw(); requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

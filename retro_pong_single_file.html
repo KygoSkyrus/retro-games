@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Retro Pong — Single File</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+:root{--bg:#020306;--grid:#071018;--accent:#7ef0a3}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:linear-gradient(180deg,#000,#041020);font-family:'Press Start 2P',monospace;color:var(--accent);display:flex;align-items:center;justify-content:center}
+.container{width:100%;max-width:920px;padding:18px}
+.card{background:linear-gradient(180deg,#071018,#061018);padding:14px;border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.6)}
+.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.title{font-size:14px}
+.hud{font-size:12px;display:flex;gap:12px;align-items:center}
+.controls{display:flex;gap:8px}
+.canvas-wrap{position:relative}
+canvas{display:block;width:100%;height:auto;background:#001217;border-radius:6px}
+.mode-toggle{padding:8px;border-radius:6px;background:#07131a;color:var(--accent);border:0;cursor:pointer}
+.btn{padding:8px;border-radius:6px;background:#0b1720;color:#ffd27a;border:0;cursor:pointer}
+.footer{margin-top:8px;font-size:11px;color:#84aedd}
+.touch-controls{display:none;margin-top:10px}
+@media(max-width:700px){.touch-controls{display:flex;gap:8px}}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="card">
+    <div class="header">
+      <div class="title">RETRO PONG</div>
+      <div class="hud">
+        <div>Mode:</div>
+        <select id="mode" class="mode-toggle">
+          <option value="ai">Single-player (vs AI)</option>
+          <option value="pvp">Two-player</option>
+        </select>
+        <div>High: <span id="high">0</span></div>
+        <button id="start" class="btn">Start</button>
+        <button id="reset" class="btn">Reset</button>
+      </div>
+    </div>
+    <div class="canvas-wrap">
+      <canvas id="pong" width="800" height="480"></canvas>
+    </div>
+    <div class="touch-controls">
+      <button data-act="p1-up" class="btn">P1 ▲</button>
+      <button data-act="p1-down" class="btn">P1 ▼</button>
+      <button data-act="p2-up" class="btn">P2 ▲</button>
+      <button data-act="p2-down" class="btn">P2 ▼</button>
+    </div>
+    <div class="footer">Retro look, both modes (AI & 2-player), responsive, touch & keyboard controls, highscore saved locally.</div>
+  </div>
+</div>
+<script>
+(function(){
+  const canvas = document.getElementById('pong');
+  const ctx = canvas.getContext('2d');
+  const modeSel = document.getElementById('mode');
+  const startBtn = document.getElementById('start');
+  const resetBtn = document.getElementById('reset');
+  const highEl = document.getElementById('high');
+
+  // responsive
+  function fit(){ const maxW = Math.min(window.innerWidth*0.95, 920); const ratio = canvas.height/canvas.width; canvas.style.width = maxW + 'px'; canvas.style.height = Math.round(maxW*ratio)+'px'; }
+  window.addEventListener('resize', fit); fit();
+
+  // game state
+  const PADDLE_W = 12, PADDLE_H = 90;
+  let left = { x: 40, y: canvas.height/2 - PADDLE_H/2, vy:0, score:0 };
+  let right = { x: canvas.width-40-PADDLE_W, y: canvas.height/2 - PADDLE_H/2, vy:0, score:0 };
+  let ball = { x: canvas.width/2, y: canvas.height/2, r:8, vx:5*(Math.random()>0.5?1:-1), vy: (Math.random()*4-2) };
+  let running=false, mode='ai';
+  let high = parseInt(localStorage.getItem('pongHigh')||'0',10); highEl.textContent = high;
+
+  // input
+  const keys = {};
+  window.addEventListener('keydown', e=>{ keys[e.code]=true; if(e.code==='Space') start(); });
+  window.addEventListener('keyup', e=>{ keys[e.code]=false; });
+
+  // touch buttons
+  document.querySelectorAll('.touch-controls button').forEach(b=>{
+    b.addEventListener('touchstart', e=>{ const a=b.dataset.act; if(a==='p1-up') keys['KeyW']=true; if(a==='p1-down') keys['KeyS']=true; if(a==='p2-up') keys['ArrowUp']=true; if(a==='p2-down') keys['ArrowDown']=true; });
+    b.addEventListener('touchend', e=>{ const a=b.dataset.act; if(a==='p1-up') keys['KeyW']=false; if(a==='p1-down') keys['KeyS']=false; if(a==='p2-up') keys['ArrowUp']=false; if(a==='p2-down') keys['ArrowDown']=false; });
+  });
+
+  // sounds
+  const AudioCtx = window.AudioContext || window.webkitAudioContext; const actx = AudioCtx?new AudioCtx():null;
+  function sfx(type){ if(!actx) return; const o=actx.createOscillator(), g=actx.createGain(); if(type==='hit'){ o.frequency.value=900; g.gain.value=0.02; } else if(type==='score'){ o.frequency.value=220; g.gain.value=0.04; } else { o.frequency.value=500; g.gain.value=0.02; } o.type='square'; o.connect(g); g.connect(actx.destination); o.start(); g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime+0.12); o.stop(actx.currentTime+0.15); }
+
+  function reset(){ left.y = canvas.height/2 - PADDLE_H/2; right.y = left.y; left.score=0; right.score=0; resetBall(); running=false; }
+  function resetBall(dir){ ball.x = canvas.width/2; ball.y = canvas.height/2; const sign = dir || (Math.random()>0.5?1:-1); ball.vx = 5*sign; ball.vy = (Math.random()*4-2); }
+
+  function start(){ if(!running){ running=true; if(actx) actx.resume(); } }
+
+  function update(){ // input -> paddles
+    const speed = 6;
+    // player controls: W/S for left, Up/Down for right (if PVP)
+    if(keys['KeyW']) left.y -= speed; if(keys['KeyS']) left.y += speed;
+    if(mode==='pvp'){ if(keys['ArrowUp']) right.y -= speed; if(keys['ArrowDown']) right.y += speed; }
+    // clamp
+    left.y = Math.max(0, Math.min(canvas.height - PADDLE_H, left.y));
+    right.y = Math.max(0, Math.min(canvas.height - PADDLE_H, right.y));
+
+    // AI
+    if(mode==='ai'){
+      const target = ball.y - PADDLE_H/2;
+      // simple proportional AI with max speed
+      const diff = target - right.y; const max = 5 + Math.min(6, Math.abs(ball.vx)/1.5);
+      right.y += Math.max(-max, Math.min(max, diff*0.08));
+      right.y = Math.max(0, Math.min(canvas.height - PADDLE_H, right.y));
+    }
+
+    if(running){ // ball physics
+      ball.x += ball.vx; ball.y += ball.vy;
+      // top/bottom
+      if(ball.y - ball.r < 0){ ball.y = ball.r; ball.vy *= -1; sfx('hit'); }
+      if(ball.y + ball.r > canvas.height){ ball.y = canvas.height - ball.r; ball.vy *= -1; sfx('hit'); }
+
+      // paddle collisions
+      // left paddle
+      if(ball.x - ball.r <= left.x + PADDLE_W && ball.x - ball.r > left.x){ if(ball.y > left.y && ball.y < left.y + PADDLE_H){ ball.x = left.x + PADDLE_W + ball.r; reflectOffPaddle(left); sfx('hit'); } }
+      // right paddle
+      if(ball.x + ball.r >= right.x && ball.x + ball.r < right.x + PADDLE_W){ if(ball.y > right.y && ball.y < right.y + PADDLE_H){ ball.x = right.x - ball.r; reflectOffPaddle(right); sfx('hit'); } }
+
+      // left/right score
+      if(ball.x < -50){ // right scores
+        right.score++; sfx('score'); if(mode==='ai'){ if(right.score>high) { high = right.score; localStorage.setItem('pongHigh', high); highEl.textContent = high; } }
+        resetBall(1); running=false;
+      }
+      if(ball.x > canvas.width + 50){ // left scores
+        left.score++; sfx('score'); if(mode==='ai'){ if(left.score>high) { high = left.score; localStorage.setItem('pongHigh', high); highEl.textContent = high; } }
+        resetBall(-1); running=false;
+      }
+
+    }
+  }
+
+  function reflectOffPaddle(pad){ // change vx/vy based on hit position
+    const relative = (ball.y - pad.y) / PADDLE_H; // 0..1
+    const angle = (relative - 0.5) * Math.PI/2; // -90deg..90deg
+    const speed = Math.min(12, Math.hypot(ball.vx, ball.vy) * 1.02);
+    const dir = (pad === left) ? 1 : -1;
+    ball.vx = Math.cos(angle) * speed * dir;
+    ball.vy = Math.sin(angle) * speed;
+  }
+
+  function drawNet(){ ctx.fillStyle = 'rgba(126,240,163,0.08)'; const w=4; let y=10; while(y < canvas.height - 10){ ctx.fillRect(canvas.width/2 - w/2, y, w, 10); y += 24; } }
+
+  function draw(){ ctx.clearRect(0,0,canvas.width,canvas.height);
+    // background
+    ctx.fillStyle = '#001217'; ctx.fillRect(0,0,canvas.width,canvas.height);
+    drawNet();
+
+    // paddles
+    ctx.fillStyle = '#7ef0a3'; ctx.fillRect(left.x, left.y, PADDLE_W, PADDLE_H);
+    ctx.fillRect(right.x, right.y, PADDLE_W, PADDLE_H);
+
+    // ball (retro glow)
+    const g = ctx.createRadialGradient(ball.x-2, ball.y-2, 1, ball.x, ball.y, ball.r);
+    g.addColorStop(0, '#fff'); g.addColorStop(1, '#7ef0a3'); ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI*2); ctx.fill();
+
+    // scores
+    ctx.fillStyle = '#7ef0a3'; ctx.font = '26px monospace'; ctx.textAlign='center'; ctx.fillText(left.score, canvas.width/2 - 120, 40); ctx.fillText(right.score, canvas.width/2 + 120, 40);
+
+    // footer instructions
+    ctx.font='12px monospace'; ctx.textAlign='left'; ctx.fillText('W/S = Left paddle  ·  ↑/↓ = Right paddle', 12, canvas.height - 12);
+  }
+
+  function loop(){ update(); draw(); requestAnimationFrame(loop); }
+
+  // UI hooks
+  modeSel.addEventListener('change', ()=>{ mode = modeSel.value; reset(); if(mode==='ai') highEl.textContent = localStorage.getItem('pongHigh') || 0; else highEl.textContent = '-'; });
+  startBtn.addEventListener('click', ()=>{ start(); });
+  resetBtn.addEventListener('click', ()=>{ reset(); });
+
+  // init
+  reset(); loop();
+})();
+</script>
+</body>
+</html>
