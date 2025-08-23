@@ -1,4 +1,74 @@
-<p>Hello Vite!</p>
+<!DOCTYPE html>
+<html lang="en">
 
-<a href="retro_tetris_single_file.html">tetris</a>
-<a href="retro_tetris_single_file (1).html">tetris 1</a>
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Retro Games</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+
+        #game-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+
+        .game-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+
+        .game-card a {
+            display: inline-block;
+            margin-top: 10px;
+            padding: 8px 12px;
+            background: #007bff;
+            color: white;
+            border-radius: 5px;
+            text-decoration: none;
+        }
+
+        .game-card a:hover {
+            background: #0056b3;
+        }
+    </style>
+
+</head>
+
+<body>
+    <h1>REtRO GAmES</h1>
+    <div id="game-list"></div>
+
+    <script>
+        const games = [
+            { name: "Tetris", file: "retro_tetris_single_file.html" },
+            { name: "Tetris Variant", file: "retro_tetris_single_file (1).html" },
+            { name: "Snake", file: "snake.html" },
+            { name: "Pong", file: "pong.html" }
+        ];
+
+        window.addEventListener("DOMContentLoaded", () => {
+            const container = document.getElementById("game-list");
+            games.forEach(game => {
+                const card = document.createElement("div");
+                card.className = "game-card";
+                card.innerHTML = `
+        <h3>${game.name}</h3>
+        <a href="games/${game.file}" target="_blank">Play</a>
+      `;
+                container.appendChild(card);
+            });
+        });
+    </script>
+
+</body>
+
+</html>
