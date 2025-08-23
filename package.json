@@ -4,7 +4,9 @@
   "description": "Mini retro games",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "vite build",
+    "preview": "vite preview --port 8080"
   },
   "author": "kygoskyrus",
   "license": "ISC",
