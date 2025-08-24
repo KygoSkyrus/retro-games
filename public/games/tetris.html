@@ -199,6 +199,19 @@
               <button class="btn" id="startBtn">Start</button>
               <button class="btn" id="resetBtn">Reset</button>
             </div>
+            <div class="touch-controls card"
+              style="margin-top:8px;padding:10px;display:flex;flex-direction:column;gap:8px">
+              <div style="display:flex;justify-content:space-between;gap:6px">
+                <button class="btn" data-action="left">◀</button>
+                <button class="btn" data-action="rotate">⟳</button>
+                <button class="btn" data-action="right">▶</button>
+              </div>
+              <div style="display:flex;justify-content:space-between;gap:6px">
+                <button class="btn" data-action="soft">↓</button>
+                <button class="btn" data-action="hard">⤓</button>
+                <button class="btn" data-action="hold">H</button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -634,6 +647,15 @@
     // UI
     document.getElementById('startBtn').addEventListener('click', () => { startGame(); });
     document.getElementById('resetBtn').addEventListener('click', () => { startGame(); });
+
+    // touch buttons [these are for mobile only, need to enable click to make it work for windows too]
+    document.querySelectorAll('[data-action]').forEach(btn => {
+
+      btn.addEventListener('touchstart', e => { e.preventDefault(); const act = btn.dataset.action; if (act === 'left') move(-1); if (act === 'right') move(1); if (act === 'rotate') { if (rotatePlayer(1)) lockTimer = 0; } if (act === 'soft') { softDropping = true; } if (act === 'hard') { hardDrop(); } if (act === 'hold') { holdPiece(); } }, { passive: false }); btn.addEventListener('touchend', e => { if (btn.dataset.action === 'soft') softDropping = false; });
+
+      btn.addEventListener('mousedown', e => { e.preventDefault(); const act = btn.dataset.action; if (act === 'left') move(-1); if (act === 'right') move(1); if (act === 'rotate') { if (rotatePlayer(1)) lockTimer = 0; } if (act === 'soft') { softDropping = true; } if (act === 'hard') { hardDrop(); } if (act === 'hold') { holdPiece(); } }, { passive: false }); btn.addEventListener('mouseup', e => { if (btn.dataset.action === 'soft') softDropping = false; });
+
+    });
 
     // initial setup
     pushNextQueue(); spawnPiece(); updateHUD(); draw();
